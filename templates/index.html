@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>GPT 챗봇</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="chat-container">
+    <h2>GPT 챗봇</h2>
+    <div class="chat-box" id="chatBox"></div>
+    <div class="input-area">
+      <input type="text" id="userInput" placeholder="입력..." onkeydown="if(event.key==='Enter') sendMessage()">
+      <button onclick="sendMessage()">전송</button>
+    </div>
+  </div>
+  <script>
+    const chatBox = document.getElementById('chatBox');
+    const input = document.getElementById('userInput');
+
+    function addMessage(text, sender) {
+      const msg = document.createElement('div');
+      msg.className = 'message ' + sender;
+      msg.textContent = text;
+      chatBox.appendChild(msg);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const userText = input.value.trim();
+      if (!userText) return;
+      addMessage(userText, 'user');
+      input.value = '';
+
+      addMessage('...', 'bot');
+
+      const response = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userText })
+      });
+
+      const data = await response.json();
+      const botMsg = document.querySelector('.bot:last-child');
+      botMsg.textContent = '';
+
+      let i = 0;
+      const typing = setInterval(() => {
+        if (i < data.reply.length) {
+          botMsg.textContent += data.reply[i++];
+          chatBox.scrollTop = chatBox.scrollHeight;
+        } else {
+          clearInterval(typing);
+        }
+      }, 20);
+    }
+  </script>
+</body>
+</html>
