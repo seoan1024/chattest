@@ -89,6 +89,7 @@ def chat():
 # 서버 실행
 if __name__ == '__main__':
     import os
-    port = int(os.environ.get('PORT', 10000))  # Render가 감지할 수 있도록 반드시 환경변수 PORT 사용
+    port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+
 
