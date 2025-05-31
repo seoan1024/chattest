@@ -4,19 +4,29 @@
   <meta charset="UTF-8">
   <title>GPT 챗봇</title>
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    /* 버튼 위치를 좀 이쁘게 */
+    #voiceBtn {
+      margin-left: 10px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
   <div class="chat-container">
-    <h2>GPT 챗봇</h2>
+    <h2>Chat AI</h2>
     <div class="chat-box" id="chatBox"></div>
     <div class="input-area">
       <input type="text" id="userInput" placeholder="입력..." onkeydown="if(event.key==='Enter') sendMessage()">
       <button onclick="sendMessage()">전송</button>
+      <button id="voiceBtn" title="음성인식 시작">🎤</button>
     </div>
   </div>
   <script>
     const chatBox = document.getElementById('chatBox');
     const input = document.getElementById('userInput');
+    const voiceBtn = document.getElementById('voiceBtn');
 
     function addMessage(text, sender) {
       const msg = document.createElement('div');
@@ -53,6 +63,41 @@
           clearInterval(typing);
         }
       }, 20);
+    }
+
+    // 음성인식 준비
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('이 브라우저는 음성인식을 지원하지 않아요.');
+      voiceBtn.disabled = true;
+    } else {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'ko-KR';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      voiceBtn.onclick = () => {
+        recognition.start();
+        voiceBtn.textContent = '🎙️ 듣는 중...';
+        voiceBtn.disabled = true;
+      };
+
+      recognition.onresult = (event) => {
+        const speechResult = event.results[0][0].transcript;
+        input.value = speechResult;
+        sendMessage();
+      };
+
+      recognition.onend = () => {
+        voiceBtn.textContent = '🎤';
+        voiceBtn.disabled = false;
+      };
+
+      recognition.onerror = (event) => {
+        console.error('음성인식 에러:', event.error);
+        voiceBtn.textContent = '🎤';
+        voiceBtn.disabled = false;
+      };
     }
   </script>
 </body>
