@@ -1,11 +1,10 @@
-from flask import Flask, request, jsonify, render_template
-from transformers import GPTJForCausalLM, GPT2Tokenizer
-import json, os, difflib
 
-# Flask 앱 설정
+from flask import Flask, request, jsonify, render_template
+import json, os, difflib
+from duckduckgo_search import DDGS
+
 app = Flask(__name__)
 
-# 기본 설정
 HISTORY_FILE = "memory.json"
 ADMIN_PASSWORD = "seoan1024"
 DEFAULT_MEMORY = {
@@ -14,82 +13,71 @@ DEFAULT_MEMORY = {
     "고마워": "언제든지요!"
 }
 
-# 메모리 파일이 없으면 기본 메모리로 초기화
 if not os.path.exists(HISTORY_FILE):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
         json.dump(DEFAULT_MEMORY, f, ensure_ascii=False, indent=2)
 
-# 메모리 파일 로드
 with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
     memory = json.load(f)
 
 vocab_list = list(DEFAULT_MEMORY.keys()) + ["정렬", "리스트", "파이썬", "기억", "검색", "챗봇", "날씨", "시간", "감사", "가격"]
 last_response = ""
 
-# GPT-J 모델 로드
-model_name = "EleutherAI/gpt-j-6B"
-model = GPTJForCausalLM.from_pretrained(model_name)
-tokenizer = GPT2Tokenizer.from_pretrained(model_name)
-
-# 오타 수정 함수
 def correct_typo(user_input):
-    return ' '.join([ 
+    return ' '.join([
         difflib.get_close_matches(w, vocab_list, n=1, cutoff=0.7)[0] if difflib.get_close_matches(w, vocab_list, n=1, cutoff=0.7) else w
         for w in user_input.split()
     ])
 
-# 유사한 질문 찾기
 def find_similar_question(user_input):
     for q in memory:
         if difflib.SequenceMatcher(None, user_input, q).ratio() > 0.75:
             return q
     return None
 
-# GPT-J 모델을 사용하여 응답 생성
-def generate_response(input_text):
-    inputs = tokenizer(input_text, return_tensors="pt")
-    output = model.generate(inputs["input_ids"], max_length=150, num_return_sequences=1, no_repeat_ngram_size=2)
-    response = tokenizer.decode(output[0], skip_special_tokens=True)
-    return response
+def search_web(query):
+    with DDGS() as ddgs:
+        results = list(ddgs.text(query, region='wt-wt', safesearch='Moderate', max_results=1))
+        if results:
+            body = results[0].get('body', '')
+            url = results[0].get('href', '')
+            if body:
+                return f"{body} (출처: {url})" if url else body
+    return ""
 
-# 메인 페이지 라우트
+def summarize_text(text):
+    sentences = text.split('.')
+    important = [s.strip() for s in sentences if len(s.strip()) > 20]
+    return '.'.join(important[:2]) + '.' if important else ''
+
 @app.route('/')
 def index():
     return render_template("index.html")
 
-# 채팅 기능 라우트
 @app.route('/chat', methods=['POST'])
 def chat():
     global last_response
     user_input = request.json['message']
-
-    # 관리자 비밀번호 입력 시 메모리 반환
     if user_input.strip() == ADMIN_PASSWORD:
         reply = '\n'.join([f"Q: {q}\nA: {a}" for q, a in memory.items()])
+    elif "요약" in user_input:
+        reply = summarize_text(last_response)
     else:
-        # 오타 수정
         corrected = correct_typo(user_input)
-
-        # 유사한 질문이 있으면 기존 메모리에서 응답
         similar_q = find_similar_question(corrected)
         if similar_q:
             reply = memory[similar_q]
         else:
-            # GPT-J 모델을 통해 새로운 응답 생성
-            reply = generate_response(corrected)
+            web_info = search_web(corrected)
+            summary = summarize_text(web_info) if web_info else "죄송해요, 잘 모르겠어요."
+            source = web_info.split(' (출처: ')[-1] if '출처:' in web_info else ''
+            reply = summary + (f"\n\n출처: {source}" if source else '')
             memory[corrected] = reply
-
-            # 메모리 파일 업데이트
             with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
                 json.dump(memory, f, ensure_ascii=False, indent=2)
-
     last_response = reply
-    return jsonify({"reply": reply})
+    return jsonify({ "reply": reply })
 
-# 서버 실행
 if __name__ == '__main__':
-    import os
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
-
